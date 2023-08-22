@@ -31,11 +31,21 @@ func main() {
 
 	writeAPI := influxClient.WriteAPIBlocking(influxDBOrg, influxDBBucket)
 
-	spotId := "5842041f4e65fad6a7708841"
+	pacificBeachSpotId := "5842041f4e65fad6a7708841"
+	windanseaSpotId := "5842041f4e65fad6a770883c"
+	laJollaShoresSpotId := "5842041f4e65fad6a77088cc"
+	oceanBeachSpotId := "5842041f4e65fad6a770883f"
+
 	days, timeInterval := 5, 1
 
 	// Fetch and insert data
-	fetchAndInsert(spotId, days, timeInterval, writeAPI, api)
+	fetchAndInsert(pacificBeachSpotId, days, timeInterval, writeAPI, api)
+
+	fetchAndInsert(windanseaSpotId, days, timeInterval, writeAPI, api)
+
+	fetchAndInsert(laJollaShoresSpotId, days, timeInterval, writeAPI, api)
+
+	fetchAndInsert(oceanBeachSpotId, days, timeInterval, writeAPI, api)
 }
 
 func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.WriteAPIBlocking, api *surflineapi.SurflineAPI) {
@@ -58,10 +68,26 @@ func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.Writ
 	}
 
 	if ratingForecast, err := api.GetSpotForecastRating(spotId, days, timeInterval); err == nil {
-		fmt.Println(ratingForecast)
 		insertSpotForecastRatingToInflux(spotId, ratingForecast, writeAPI)
 	} else {
 		fmt.Println("Error fetching spot forecast rating:", err)
+	}
+}
+
+// Helper function to get the friendly name
+// TODO programatically fetch spot name
+func getFriendlyNameForSpot(spotId string) string {
+	switch spotId {
+	case "5842041f4e65fad6a7708841":
+		return "Pacific Beach"
+	case "5842041f4e65fad6a770883c":
+		return "Windansea Beach"
+	case "5842041f4e65fad6a77088cc":
+		return "La Jolla Shores"
+	case "5842041f4e65fad6a770883f":
+		return "Ocean Beach"
+	default:
+		return "Unknown"
 	}
 }
 
@@ -79,7 +105,8 @@ func insertWaveForecastToInflux(spotId string, waveForecast *surflineapi.WaveFor
 			"utcOffset":     waveData.UtcOffset,
 		}
 		tags := map[string]string{
-			"spotId": spotId,
+			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
 		}
 
 		p := influxdb2.NewPoint("waveForecast",
@@ -100,6 +127,7 @@ func insertWindForecastToInflux(spotId string, windForecast *surflineapi.WindFor
 		tags := map[string]string{
 			"location": fmt.Sprintf("%f,%f", windForecast.Associated.Location.Lat, windForecast.Associated.Location.Lon),
 			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
 		}
 
 		fields := map[string]interface{}{
@@ -130,6 +158,7 @@ func insertTideForecastToInflux(spotId string, tideForecast *surflineapi.TideFor
 			"location": fmt.Sprintf("%f,%f", tideForecast.Associated.TideLocation.Lat, tideForecast.Associated.TideLocation.Lon),
 			"name":     tideForecast.Associated.TideLocation.Name,
 			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
 		}
 
 		fields := map[string]interface{}{
@@ -161,6 +190,7 @@ func insertSpotForecastRatingToInflux(spotId string, ratingForecast *surflineapi
 		tags := map[string]string{
 			"spotId":    spotId,
 			"ratingKey": rating.Rating.Key,
+			"spotName":  getFriendlyNameForSpot(spotId),
 		}
 
 		p := influxdb2.NewPoint(
