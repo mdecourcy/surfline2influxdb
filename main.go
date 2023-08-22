@@ -3,22 +3,49 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
 	surflineapi "github.com/mdecourcy/go-surfline-api/pkg/surflineapi"
 )
 
-const (
-	influxDBUrl    = "http://localhost:8086"
-	influxDBToken  = ""
-	influxDBOrg    = "health"
-	influxDBBucket = "surfline"
-)
+type Config struct {
+	InfluxDB struct {
+		Url    string `yaml:"url"`
+		Org    string `yaml:"org"`
+		Bucket string `yaml:"bucket"`
+	} `yaml:"influxdb"`
+}
 
 func main() {
+
+	var cfg Config
+	configFile, err := os.ReadFile("config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to read config file: %v", err)
+	}
+
+	err = yaml.Unmarshal(configFile, &cfg)
+	if err != nil {
+		log.Fatalf("Failed to unmarshal config: %v", err)
+	}
+
+	token, err := os.ReadFile("secrets.txt")
+	if err != nil {
+		log.Fatalf("Failed to read secrets file: %v", err)
+	}
+
+	influxDBUrl := cfg.InfluxDB.Url
+	influxDBToken := string(token)
+	influxDBOrg := cfg.InfluxDB.Org
+	influxDBBucket := cfg.InfluxDB.Bucket
+
 	// Setup Surfline API
 	client := &http.Client{}
 	api := &surflineapi.SurflineAPI{

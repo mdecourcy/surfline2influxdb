@@ -48,3 +48,4 @@ Temporary Items
 # Log files for the Go program (if you're logging output and errors)
 forecast_output.log
 forecast_error.log
+secrets.txt
