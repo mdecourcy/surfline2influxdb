@@ -40,7 +40,7 @@ func main() {
 		log.Fatalf("Failed to unmarshal config: %v", err)
 	}
 
-	token, err := os.ReadFile("secrets.txt")
+	token, err := os.ReadFile(filepath.Join(dir, "secrets.txt"))
 
 	if err != nil {
 		log.Fatalf("Failed to read secrets file: %v", err)
