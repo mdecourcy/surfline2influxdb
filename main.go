@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -26,7 +27,10 @@ type Config struct {
 func main() {
 
 	var cfg Config
-	configFile, err := os.ReadFile("config.yaml")
+
+	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	configFile, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
+
 	if err != nil {
 		log.Fatalf("Failed to read config file: %v", err)
 	}
