@@ -37,6 +37,7 @@ func main() {
 	}
 
 	token, err := os.ReadFile("secrets.txt")
+
 	if err != nil {
 		log.Fatalf("Failed to read secrets file: %v", err)
 	}
@@ -131,9 +132,14 @@ func insertWaveForecastToInflux(spotId string, waveForecast *surflineapi.WaveFor
 			"power":         waveData.Power,
 			"utcOffset":     waveData.UtcOffset,
 		}
+		forecastTime := time.Unix(waveData.Timestamp, 0).UTC()
+		currentTime := time.Now().UTC()
+		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
+
 		tags := map[string]string{
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
+			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
 		}
 
 		p := influxdb2.NewPoint("waveForecast",
@@ -151,10 +157,16 @@ func insertWaveForecastToInflux(spotId string, waveForecast *surflineapi.WaveFor
 // insertWindForecastToInflux writes wind forecast data to InfluxDB
 func insertWindForecastToInflux(spotId string, windForecast *surflineapi.WindForecastResponse, writeAPI api.WriteAPIBlocking) {
 	for _, windDetail := range windForecast.Data.Wind {
+
+		forecastTime := time.Unix(windDetail.Timestamp, 0)
+		currentTime := time.Now().UTC()
+		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
+
 		tags := map[string]string{
 			"location": fmt.Sprintf("%f,%f", windForecast.Associated.Location.Lat, windForecast.Associated.Location.Lon),
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
+			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
 		}
 
 		fields := map[string]interface{}{
@@ -181,11 +193,17 @@ func insertWindForecastToInflux(spotId string, windForecast *surflineapi.WindFor
 }
 func insertTideForecastToInflux(spotId string, tideForecast *surflineapi.TideForecastResponse, writeAPI api.WriteAPIBlocking) {
 	for _, tideInfo := range tideForecast.Data.Tides {
+
+		forecastTime := time.Unix(tideInfo.Timestamp, 0)
+		currentTime := time.Now().UTC()
+		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
+
 		tags := map[string]string{
 			"location": fmt.Sprintf("%f,%f", tideForecast.Associated.TideLocation.Lat, tideForecast.Associated.TideLocation.Lon),
 			"name":     tideForecast.Associated.TideLocation.Name,
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
+			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
 		}
 
 		fields := map[string]interface{}{
@@ -210,6 +228,10 @@ func insertTideForecastToInflux(spotId string, tideForecast *surflineapi.TideFor
 
 func insertSpotForecastRatingToInflux(spotId string, ratingForecast *surflineapi.SpotForecastRatingResponse, writeAPI api.WriteAPIBlocking) {
 	for _, rating := range ratingForecast.Data.Rating {
+		forecastTime := time.Unix(rating.Timestamp, 0).UTC()
+		currentTime := time.Now().UTC()
+		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
+
 		fields := map[string]interface{}{
 			"ratingValue": rating.Rating.Value,
 			"utcOffset":   rating.UtcOffset,
@@ -218,6 +240,7 @@ func insertSpotForecastRatingToInflux(spotId string, ratingForecast *surflineapi
 			"spotId":    spotId,
 			"ratingKey": rating.Rating.Key,
 			"spotName":  getFriendlyNameForSpot(spotId),
+			"age_h":     fmt.Sprintf("%d", forecastAgeHours),
 		}
 
 		p := influxdb2.NewPoint(
