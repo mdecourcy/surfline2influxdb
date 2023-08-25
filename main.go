@@ -100,6 +100,15 @@ func main() {
 
 	// Wait for all goroutines to finish
 	wg.Wait()
+
+	for i := 0; i < len(cfg.Spots); i++ {
+		select {
+		case err := <-errCh:
+			log.Println("Error:", err)
+		case <-doneCh:
+			continue
+		}
+	}
 }
 
 func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.WriteAPIBlocking, api *surflineapi.SurflineAPI) error {
