@@ -25,6 +25,7 @@ type Config struct {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	var cfg Config
 
@@ -125,6 +126,10 @@ func getFriendlyNameForSpot(spotId string) string {
 
 func insertWaveForecastToInflux(spotId string, waveForecast *surflineapi.WaveForecastResponse, writeAPI api.WriteAPIBlocking) {
 	for _, waveData := range waveForecast.Data.Wave {
+		forecastTime := time.Unix(waveData.Timestamp, 0)
+		currentTime := time.Now().UTC()
+		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
+
 		fields := map[string]interface{}{
 			"probability":   waveData.Probability,
 			"minSurf":       waveData.Surf.Min,
@@ -136,24 +141,54 @@ func insertWaveForecastToInflux(spotId string, waveForecast *surflineapi.WaveFor
 			"power":         waveData.Power,
 			"utcOffset":     waveData.UtcOffset,
 		}
-		forecastTime := time.Unix(waveData.Timestamp, 0).UTC()
-		currentTime := time.Now().UTC()
-		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
 
-		tags := map[string]string{
+		tagsWithAge := map[string]string{
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
 			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
 		}
 
-		p := influxdb2.NewPoint("waveForecast",
-			tags,
-			fields,
-			time.Unix(waveData.Timestamp, 0),
-		)
-		err := writeAPI.WritePoint(context.Background(), p)
+		tagsWithoutAge := map[string]string{
+			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
+		}
+
+		// Writing wave forecast data
+		pWithAge := influxdb2.NewPoint("waveForecast", tagsWithAge, fields, time.Unix(waveData.Timestamp, 0))
+		err := writeAPI.WritePoint(context.Background(), pWithAge)
 		if err != nil {
-			fmt.Println("Error writing to InfluxDB:", err)
+			fmt.Println("Error writing to InfluxDB with age_h tag:", err)
+		}
+
+		pWithoutAge := influxdb2.NewPoint("waveForecast", tagsWithoutAge, fields, time.Unix(waveData.Timestamp, 0))
+		err = writeAPI.WritePoint(context.Background(), pWithoutAge)
+		if err != nil {
+			fmt.Println("Error writing to InfluxDB without age_h tag:", err)
+		}
+
+		// Writing swells data
+		for _, swell := range waveData.Swells {
+			swellFields := map[string]interface{}{
+				"height":       swell.Height,
+				"period":       swell.Period,
+				"impact":       swell.Impact,
+				"power":        swell.Power,
+				"direction":    swell.Direction,
+				"directionMin": swell.DirectionMin,
+				"optimalScore": swell.OptimalScore,
+			}
+
+			pSwellWithAge := influxdb2.NewPoint("swellForecast", tagsWithAge, swellFields, time.Unix(waveData.Timestamp, 0))
+			err := writeAPI.WritePoint(context.Background(), pSwellWithAge)
+			if err != nil {
+				fmt.Println("Error writing swell to InfluxDB with age_h tag:", err)
+			}
+
+			pSwellWithoutAge := influxdb2.NewPoint("swellForecast", tagsWithoutAge, swellFields, time.Unix(waveData.Timestamp, 0))
+			err = writeAPI.WritePoint(context.Background(), pSwellWithoutAge)
+			if err != nil {
+				fmt.Println("Error writing swell to InfluxDB without age_h tag:", err)
+			}
 		}
 	}
 }
@@ -166,11 +201,17 @@ func insertWindForecastToInflux(spotId string, windForecast *surflineapi.WindFor
 		currentTime := time.Now().UTC()
 		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
 
-		tags := map[string]string{
+		tagsWithAge := map[string]string{
 			"location": fmt.Sprintf("%f,%f", windForecast.Associated.Location.Lat, windForecast.Associated.Location.Lon),
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
 			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
+		}
+
+		tagsWithoutAge := map[string]string{
+			"location": fmt.Sprintf("%f,%f", windForecast.Associated.Location.Lat, windForecast.Associated.Location.Lon),
+			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
 		}
 
 		fields := map[string]interface{}{
@@ -182,16 +223,18 @@ func insertWindForecastToInflux(spotId string, windForecast *surflineapi.WindFor
 			"utcOffset":     windDetail.UtcOffset,
 		}
 
-		p := influxdb2.NewPoint(
-			"windForecast",
-			tags,
-			fields,
-			time.Unix(windDetail.Timestamp, 0),
-		)
-
-		err := writeAPI.WritePoint(context.Background(), p)
+		// Writing point with age_h tag
+		pWithAge := influxdb2.NewPoint("windForecast", tagsWithAge, fields, time.Unix(windDetail.Timestamp, 0))
+		err := writeAPI.WritePoint(context.Background(), pWithAge)
 		if err != nil {
-			fmt.Println("Error writing wind forecast to InfluxDB:", err)
+			fmt.Println("Error writing to InfluxDB with age_h tag:", err)
+		}
+
+		// Writing point without age_h tag
+		pWithoutAge := influxdb2.NewPoint("windForecast", tagsWithoutAge, fields, time.Unix(windDetail.Timestamp, 0))
+		err = writeAPI.WritePoint(context.Background(), pWithoutAge)
+		if err != nil {
+			fmt.Println("Error writing to InfluxDB without age_h tag:", err)
 		}
 	}
 }
@@ -202,12 +245,19 @@ func insertTideForecastToInflux(spotId string, tideForecast *surflineapi.TideFor
 		currentTime := time.Now().UTC()
 		forecastAgeHours := int(currentTime.Sub(forecastTime).Hours())
 
-		tags := map[string]string{
+		tagsWithAge := map[string]string{
 			"location": fmt.Sprintf("%f,%f", tideForecast.Associated.TideLocation.Lat, tideForecast.Associated.TideLocation.Lon),
 			"name":     tideForecast.Associated.TideLocation.Name,
 			"spotId":   spotId,
 			"spotName": getFriendlyNameForSpot(spotId),
 			"age_h":    fmt.Sprintf("%d", forecastAgeHours),
+		}
+
+		tagsWithoutAge := map[string]string{
+			"location": fmt.Sprintf("%f,%f", tideForecast.Associated.TideLocation.Lat, tideForecast.Associated.TideLocation.Lon),
+			"name":     tideForecast.Associated.TideLocation.Name,
+			"spotId":   spotId,
+			"spotName": getFriendlyNameForSpot(spotId),
 		}
 
 		fields := map[string]interface{}{
@@ -216,17 +266,20 @@ func insertTideForecastToInflux(spotId string, tideForecast *surflineapi.TideFor
 			"utcOffset": tideInfo.UtcOffset,
 		}
 
-		p := influxdb2.NewPoint(
-			"tideForecast",
-			tags,
-			fields,
-			time.Unix(tideInfo.Timestamp, 0),
-		)
-
-		err := writeAPI.WritePoint(context.Background(), p)
+		// Writing point with age_h tag
+		pWithAge := influxdb2.NewPoint("tideForecast", tagsWithAge, fields, time.Unix(tideInfo.Timestamp, 0))
+		err := writeAPI.WritePoint(context.Background(), pWithAge)
 		if err != nil {
-			fmt.Println("Error writing tide forecast to InfluxDB:", err)
+			fmt.Println("Error writing to InfluxDB with age_h tag:", err)
 		}
+
+		// Writing point without age_h tag
+		pWithoutAge := influxdb2.NewPoint("tideForecast", tagsWithoutAge, fields, time.Unix(tideInfo.Timestamp, 0))
+		err = writeAPI.WritePoint(context.Background(), pWithoutAge)
+		if err != nil {
+			fmt.Println("Error writing to InfluxDB without age_h tag:", err)
+		}
+
 	}
 }
 
@@ -240,23 +293,32 @@ func insertSpotForecastRatingToInflux(spotId string, ratingForecast *surflineapi
 			"ratingValue": rating.Rating.Value,
 			"utcOffset":   rating.UtcOffset,
 		}
-		tags := map[string]string{
+		tagsWithAge := map[string]string{
 			"spotId":    spotId,
 			"ratingKey": rating.Rating.Key,
 			"spotName":  getFriendlyNameForSpot(spotId),
 			"age_h":     fmt.Sprintf("%d", forecastAgeHours),
 		}
 
-		p := influxdb2.NewPoint(
-			"spotForecastRating",
-			tags,
-			fields,
-			time.Unix(rating.Timestamp, 0),
-		)
+		tagsWithoutAge := map[string]string{
+			"spotId":    spotId,
+			"ratingKey": rating.Rating.Key,
+			"spotName":  getFriendlyNameForSpot(spotId),
+			"age_h":     fmt.Sprintf("%d", forecastAgeHours),
+		}
 
-		err := writeAPI.WritePoint(context.Background(), p)
+		// Writing point with age_h tag
+		pWithAge := influxdb2.NewPoint("spotForecastRating", tagsWithAge, fields, time.Unix(rating.Timestamp, 0))
+		err := writeAPI.WritePoint(context.Background(), pWithAge)
 		if err != nil {
-			fmt.Println("Error writing spot forecast rating to InfluxDB:", err)
+			fmt.Println("Error writing to InfluxDB with age_h tag:", err)
+		}
+
+		// Writing point without age_h tag
+		pWithoutAge := influxdb2.NewPoint("spotForecast", tagsWithoutAge, fields, time.Unix(rating.Timestamp, 0))
+		err = writeAPI.WritePoint(context.Background(), pWithoutAge)
+		if err != nil {
+			fmt.Println("Error writing to InfluxDB without age_h tag:", err)
 		}
 	}
 }
