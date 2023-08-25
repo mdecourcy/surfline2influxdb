@@ -22,6 +22,7 @@ type Config struct {
 		Org    string `yaml:"org"`
 		Bucket string `yaml:"bucket"`
 	} `yaml:"influxdb"`
+	Spots map[string]string `yaml:"spots"`
 }
 
 func main() {
@@ -308,7 +309,7 @@ func insertSpotForecastRatingToInflux(spotId string, ratingForecast *surflineapi
 		}
 
 		// Writing point with age_h tag
-		pWithAge := influxdb2.NewPoint("spotForecastRating", tagsWithAge, fields, time.Unix(rating.Timestamp, 0))
+		pWithAge := influxdb2.NewPoint("spotForecast", tagsWithAge, fields, time.Unix(rating.Timestamp, 0))
 		err := writeAPI.WritePoint(context.Background(), pWithAge)
 		if err != nil {
 			fmt.Println("Error writing to InfluxDB with age_h tag:", err)
