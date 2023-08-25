@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -24,6 +25,9 @@ type Config struct {
 	} `yaml:"influxdb"`
 	Spots map[string]string `yaml:"spots"`
 }
+
+const maxRetries = 3
+const retryDelay = 5 * time.Second
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
@@ -65,47 +69,65 @@ func main() {
 
 	writeAPI := influxClient.WriteAPIBlocking(influxDBOrg, influxDBBucket)
 
-	pacificBeachSpotId := "5842041f4e65fad6a7708841"
-	windanseaSpotId := "5842041f4e65fad6a770883c"
-	laJollaShoresSpotId := "5842041f4e65fad6a77088cc"
-	oceanBeachSpotId := "5842041f4e65fad6a770883f"
-
 	days, timeInterval := 5, 1
 
-	// Fetch and insert data
-	fetchAndInsert(pacificBeachSpotId, days, timeInterval, writeAPI, api)
+	// Declare a WaitGroup to wait for all goroutines to finish
+	var wg sync.WaitGroup
 
-	fetchAndInsert(windanseaSpotId, days, timeInterval, writeAPI, api)
+	errCh := make(chan error, len(cfg.Spots))
+	doneCh := make(chan bool, len(cfg.Spots))
 
-	fetchAndInsert(laJollaShoresSpotId, days, timeInterval, writeAPI, api)
+	// Iterate over the spots map
+	for _, spotID := range cfg.Spots {
+		go func(spot string) {
+			retries := 0
+			for retries < maxRetries {
+				if err := fetchAndInsert(spot, days, timeInterval, writeAPI, api); err != nil {
+					retries++
+					log.Printf("Error on attempt %d for spot %s: %v", retries, spot, err)
+					if retries < maxRetries {
+						time.Sleep(retryDelay)
+						continue
+					}
+					errCh <- err
+				} else {
+					doneCh <- true
+					break
+				}
+			}
+		}(spotID)
+	}
 
-	fetchAndInsert(oceanBeachSpotId, days, timeInterval, writeAPI, api)
+	// Wait for all goroutines to finish
+	wg.Wait()
 }
 
-func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.WriteAPIBlocking, api *surflineapi.SurflineAPI) {
-	if windForecast, err := api.GetWindForecast(spotId, days, timeInterval, true, true); err == nil {
-		insertWindForecastToInflux(spotId, windForecast, writeAPI)
+func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.WriteAPIBlocking, api *surflineapi.SurflineAPI) error {
+	if windForecast, err := api.GetWindForecast(spotId, days, timeInterval, true, true); err != nil {
+		return fmt.Errorf("error fetching wind forecast for %s: %w", spotId, err)
 	} else {
-		fmt.Println("Error fetching wind forecast:", err)
+		insertWindForecastToInflux(spotId, windForecast, writeAPI)
 	}
 
 	if waveForecast, err := api.GetWaveForecast(spotId, days, timeInterval); err == nil {
+		return fmt.Errorf("error fetching wave forecast for %s: %w", spotId, err)
+	} else {
 		insertWaveForecastToInflux(spotId, waveForecast, writeAPI)
-	} else {
-		fmt.Println("Error fetching wave forecast:", err)
 	}
 
-	if tideForecast, err := api.GetTideForecast(spotId, days); err == nil {
+	if tideForecast, err := api.GetTideForecast(spotId, days); err != nil {
+		return fmt.Errorf("error fetching tide forecast for %s: %w", spotId, err)
+	} else {
 		insertTideForecastToInflux(spotId, tideForecast, writeAPI)
-	} else {
-		fmt.Println("Error fetching tide forecast:", err)
 	}
 
-	if ratingForecast, err := api.GetSpotForecastRating(spotId, days, timeInterval); err == nil {
-		insertSpotForecastRatingToInflux(spotId, ratingForecast, writeAPI)
+	if ratingForecast, err := api.GetSpotForecastRating(spotId, days, timeInterval); err != nil {
+		return fmt.Errorf("error fetching spot forecast rating for %s: %w", spotId, err)
 	} else {
-		fmt.Println("Error fetching spot forecast rating:", err)
+		insertSpotForecastRatingToInflux(spotId, ratingForecast, writeAPI)
 	}
+
+	return nil
 }
 
 // Helper function to get the friendly name
