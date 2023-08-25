@@ -118,7 +118,7 @@ func fetchAndInsert(spotId string, days int, timeInterval int, writeAPI api.Writ
 		insertWindForecastToInflux(spotId, windForecast, writeAPI)
 	}
 
-	if waveForecast, err := api.GetWaveForecast(spotId, days, timeInterval); err == nil {
+	if waveForecast, err := api.GetWaveForecast(spotId, days, timeInterval); err != nil {
 		return fmt.Errorf("error fetching wave forecast for %s: %w", spotId, err)
 	} else {
 		insertWaveForecastToInflux(spotId, waveForecast, writeAPI)
