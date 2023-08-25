@@ -2,3 +2,8 @@ influxdb:
   url: "http://localhost:8086"
   org: "health"
   bucket: "surfline"
+spots:
+  pacific_beach: "5842041f4e65fad6a7708841"
+  windansea: "5842041f4e65fad6a770883c"
+  la_jolla_shores: "5842041f4e65fad6a77088cc"
+  ocean_beach: "5842041f4e65fad6a770883f"
